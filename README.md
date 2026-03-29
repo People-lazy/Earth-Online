@@ -235,7 +235,7 @@
 
 2.1.1 项目信息
 
-• 项目仓库：https://github.com/你的用户名/地球Online（替换为实际仓库地址）
+• 项目仓库：https://github.com/People-lazy/Earth-Online/tree/main
 
 • 开发语言：标准C++（C++11及以上），无第三方依赖，无平台专属API
 
