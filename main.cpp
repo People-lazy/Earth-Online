@@ -12,23 +12,59 @@
 #include <regex>
 #include <cstdio>
 
+// ===================== 【核心修复】跨平台路径兼容 =====================
 // 跨平台目录遍历兼容（修复Mac/Xcode dirent.h问题）
 #if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
 #include <dirent.h>
 #define CLEAR_SCREEN system("cls")
 #define PATH_SEP "\\"
-#define MKDIR(path) system(("mkdir " + std::string(path)).c_str())
+// 目录创建宏自动拼接程序所在目录
+#define MKDIR(path) system(("mkdir " + PROGRAM_BASE_DIR + std::string(path)).c_str())
 #define CHCP_UTF8 system("chcp 65001 > nul")
 #else
 #include <dirent.h>
 #include <sys/stat.h>
+#include <mach-o/dyld.h>
 #define CLEAR_SCREEN system("clear")
 #define PATH_SEP "/"
-#define MKDIR(path) mkdir(path, 0755)
+// 目录创建宏自动拼接程序所在目录
+#define MKDIR(path) mkdir((PROGRAM_BASE_DIR + std::string(path)).c_str(), 0755)
 #define CHCP_UTF8
 #endif
 
 using namespace std;
+
+// ===================== 【核心修复】全局程序目录定义 =====================
+// 全局变量：保存程序可执行文件所在的绝对目录，末尾自带路径分隔符
+string PROGRAM_BASE_DIR;
+
+// 跨平台获取可执行文件自身所在的绝对目录
+string getProgramBaseDir() {
+    char exePath[1024] = {0};
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows平台：获取exe绝对路径
+    GetModuleFileNameA(NULL, exePath, sizeof(exePath));
+    string fullPath = exePath;
+    // 去掉exe文件名，保留目录，末尾补路径分隔符
+    size_t lastSepPos = fullPath.find_last_of("\\/");
+    if (lastSepPos != string::npos) {
+        return fullPath.substr(0, lastSepPos + 1);
+    }
+#else
+    // Mac OS平台：获取可执行文件绝对路径
+    uint32_t pathSize = sizeof(exePath);
+    if (_NSGetExecutablePath(exePath, &pathSize) == 0) {
+        string fullPath = exePath;
+        // 去掉文件名，保留目录，末尾补路径分隔符
+        size_t lastSepPos = fullPath.find_last_of('/');
+        if (lastSepPos != string::npos) {
+            return fullPath.substr(0, lastSepPos + 1);
+        }
+    }
+#endif
+    return "./"; // 兜底：获取失败时用当前目录
+}
 
 // 全局枚举定义
 enum Era { ERA_AR, ERA_PT, ERA_PH };
@@ -281,8 +317,9 @@ public:
         }
     }
 
+    // 【修复】MOD变量持久化路径拼接程序目录
     void savePersistentVars() {
-        ofstream f("user_var" + string(PATH_SEP) + "mod_var_save.txt");
+        ofstream f(PROGRAM_BASE_DIR + "user_var" + string(PATH_SEP) + "mod_var_save.txt");
         if (!f.is_open()) return;
         f << "# MOD自定义变量持久化文件" << endl;
         f << "[数字变量]" << endl;
@@ -292,8 +329,9 @@ public:
         f.close();
     }
 
+    // 【修复】MOD变量加载路径拼接程序目录
     void loadPersistentVars() {
-        ifstream f("user_var" + string(PATH_SEP) + "mod_var_save.txt");
+        ifstream f(PROGRAM_BASE_DIR + "user_var" + string(PATH_SEP) + "mod_var_save.txt");
         if (!f.is_open()) return;
         string line, currentSection;
         while (getline(f, line)) {
@@ -311,8 +349,9 @@ public:
         f.close();
     }
 
+    // 【修复】日志写入路径拼接程序目录
     void saveLog() {
-        ofstream f("log" + string(PATH_SEP) + "game_run.log", ios::app);
+        ofstream f(PROGRAM_BASE_DIR + "log" + string(PATH_SEP) + "game_run.log", ios::app);
         if (!f.is_open()) return;
         time_t now = time(0);
         f << "===== " << ctime(&now) << " =====" << endl;
@@ -341,6 +380,7 @@ int randomInt(int min, int max) { return rand() % (max - min + 1) + min; }
 void pause() { cout << "\n按回车键继续..."; cin.ignore(); cin.get(); }
 
 // 初始化函数
+// 【修复】目录创建已通过宏自动拼接程序目录，无需修改函数内容
 void createDefaultDirs() {
     MKDIR("script"); MKDIR("mod"); MKDIR("saves");
     MKDIR("user_var"); MKDIR("log");
@@ -443,8 +483,9 @@ void initCountries(World& world) {
     }
 }
 
+// 【修复】默认剧本创建路径拼接程序目录
 void createDefaultScript() {
-    string path = "script" + string(PATH_SEP) + "main_story.txt";
+    string path = PROGRAM_BASE_DIR + "script" + string(PATH_SEP) + "main_story.txt";
     ifstream f(path); if (f.good()) { f.close(); return; }
     ofstream out(path);
     out << "# 地球Online 主世界核心剧本" << endl;
@@ -470,9 +511,9 @@ void createDefaultScript() {
     out.close();
 }
 
-// 加载函数
+// 【修复】主剧本加载路径拼接程序目录
 bool loadMainScript(World& world) {
-    string path = "script" + string(PATH_SEP) + "main_story.txt";
+    string path = PROGRAM_BASE_DIR + "script" + string(PATH_SEP) + "main_story.txt";
     ifstream f(path); if (!f.is_open()) return false;
     string line;
     while (getline(f, line)) {
@@ -504,12 +545,13 @@ vector<string> loadModFile(const string& path) {
     f.close(); return lines;
 }
 
+// 【修复】MOD加载路径拼接程序目录
 void loadAllMods(World& world, ModExecTime execTime) {
     if (execTime == EXEC_ON_START) {
         cout << "正在加载MOD模组..." << endl;
         world.loadedMods.clear();
     }
-    string modDir = "mod";
+    string modDir = PROGRAM_BASE_DIR + "mod";
     DIR* dir = opendir(modDir.c_str());
     if (!dir) return;
     struct dirent* entry;
@@ -533,8 +575,9 @@ void loadAllMods(World& world, ModExecTime execTime) {
     if (execTime == EXEC_ON_START) MOD_ENGINE.saveLog();
 }
 
+// 【修复】存档加载路径拼接程序目录
 bool loadSave(const string& saveName, World& world) {
-    string path = "saves" + string(PATH_SEP) + saveName + ".txt";
+    string path = PROGRAM_BASE_DIR + "saves" + string(PATH_SEP) + saveName + ".txt";
     ifstream f(path); if (!f.is_open()) return false;
     World newWorld; initCountries(newWorld);
     string line, currentSection;
@@ -592,9 +635,9 @@ bool loadSave(const string& saveName, World& world) {
     return true;
 }
 
-// 保存函数
+// 【修复】存档保存路径拼接程序目录
 bool saveGame(const string& saveName, World& world) {
-    string path = "saves" + string(PATH_SEP) + saveName + ".txt";
+    string path = PROGRAM_BASE_DIR + "saves" + string(PATH_SEP) + saveName + ".txt";
     ofstream f(path, ios::trunc);
     if (!f.is_open()) return false;
     f << "[世界基础信息]" << endl;
@@ -913,7 +956,11 @@ void startMenu() {
 // 主函数
 int main() {
     CHCP_UTF8;
+    // 【必须放在最前面】启动时先锁定程序所在的绝对目录，解决路径错乱问题
+    PROGRAM_BASE_DIR = getProgramBaseDir();
     srand((unsigned int)time(NULL));
+    
+    // 后续所有逻辑不变
     createDefaultDirs();
     createDefaultScript();
     initDisasterLib();
