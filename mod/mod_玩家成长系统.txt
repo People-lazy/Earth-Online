@@ -1,6 +1,38 @@
-MOD_NAME=无灾害和平模式
-MOD_AUTHOR=系统
-MOD_VERSION=1.0
-MOD_DESC=关闭所有自然灾害，安心发展
-ENABLE_DISASTER=0
-SET_BASE_DISASTER_RATE=0.0
+MOD_NAME=玩家成长系统
+MOD_AUTHOR=高级玩家
+MOD_VERSION=2.0
+MOD_DESC=玩家成年后解锁自定义成长路线，支持交互选择
+#EXEC newyear
+
+# 定义变量
+VAR IS_ADULT=0
+VAR GROWTH_TYPE=0
+
+# 判断是否成年
+IF PLAYER_AGE >= 18 THEN
+    VAR IS_ADULT=1
+    PRINT 你已成年，解锁成长路线选择！
+    # 嵌套IF：未选择过成长路线时，弹出交互
+    IF GROWTH_TYPE == 0 THEN
+        INPUT 请选择成长路线（1=科技路线 2=经济路线 3=平衡路线） GROWTH_TYPE
+        # 嵌套IF：根据选择应用加成
+        IF GROWTH_TYPE == 1 THEN
+            PRINT 你选择了科技路线，国家科技+50%
+            SET COUNTRY_TECH=1.5
+        ELSE IF GROWTH_TYPE == 2 THEN
+            PRINT 你选择了经济路线，国家经济+50%
+            SET COUNTRY_ECONOMY=1.5
+        ELSE
+            PRINT 你选择了平衡路线，全属性+20%
+            SET COUNTRY_TECH=1.2
+            SET COUNTRY_ECONOMY=1.2
+            SET COUNTRY_LIVELIHOOD=1.2
+        END IF
+    END IF
+END IF
+
+# 多条件判断：成年且科技>2，解锁超级加成
+IF IS_ADULT == 1 AND COUNTRY_TECH >= 2.0 THEN
+    PRINT 你的科技水平已突破阈值，获得超级科技加成！
+    SET BASE_TECH_SPEED=3.0
+END IF
